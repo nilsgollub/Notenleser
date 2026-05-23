@@ -1,0 +1,70 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: 'Notenleser Server-URL (z.B. http://192.168.1.100:8000)'
+        required: true
+        default: 'http://localhost:8000'
+
+jobs:
+  build-apk:
+    name: Android APK bauen
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+
+      - name: npm-Abhängigkeiten installieren
+        working-directory: frontend
+        run: npm ci
+
+      - name: Capacitor installieren
+        working-directory: frontend
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Server-URL eintragen
+        working-directory: frontend
+        run: |
+          jq --arg url "${{ github.event.inputs.server_url }}" \
+             '.server.url = $url' \
+             capacitor.config.json > tmp.json
+          mv tmp.json capacitor.config.json
+
+      - name: Web-Assets bauen
+        working-directory: frontend
+        run: npm run build
+
+      - name: Android-Plattform hinzufügen
+        working-directory: frontend
+        run: npx cap add android
+
+      - name: Capacitor synchronisieren
+        working-directory: frontend
+        run: npx cap sync android
+
+      - name: APK bauen
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug
+
+      - name: APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: notenleser-debug-${{ github.run_number }}
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

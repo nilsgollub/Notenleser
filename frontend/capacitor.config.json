@@ -1,0 +1,12 @@
+{
+  "appId": "de.notenleser.app",
+  "appName": "Notenleser",
+  "webDir": "dist",
+  "server": {
+    "url": "http://localhost:8000",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
