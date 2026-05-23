@@ -2,6 +2,16 @@
 
 > Notenblatt fotografieren – Melodie abspielen. Inkl. Karaoke-Modus und Lied-Bibliothek.
 
+Es gibt **zwei Varianten**:
+
+| Variante | Pfad | Notenerkennung | Wann nutzen |
+|---|---|---|---|
+| **Android-App (eigenständig)** | [`android-app/`](android-app/) | Claude Vision API (`claude-opus-4-7`) | Direkt auf dem Smartphone, kein eigener Server nötig |
+| **Server / Home Assistant** | [`backend/`](backend/) + [`frontend/`](frontend/) | oemer (lokal) / Mock | Zentrale Bibliothek im Heimnetz, HA-Addon |
+
+Die folgende Doku beschreibt die **Server-/HA-Variante**. Für die standalone
+Android-App siehe [android-app/README.md](android-app/README.md).
+
 ---
 
 ## Inhaltsverzeichnis
