@@ -94,7 +94,7 @@ class _LyricsViewState extends State<LyricsView> {
       return const Center(
         child: Text(
           'Kein Liedtext auf dem Notenblatt gefunden.',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 15),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
           textAlign: TextAlign.center,
         ),
       );
@@ -130,7 +130,7 @@ class _LyricsViewState extends State<LyricsView> {
                       color: isActive
                           ? AppColors.accent
                           : isPast
-                              ? AppColors.textMuted.withOpacity(0.5)
+                              ? AppColors.textSecondary.withOpacity(0.5)
                               : AppColors.text,
                       shadows: isActive
                           ? [
