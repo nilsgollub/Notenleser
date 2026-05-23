@@ -9,16 +9,26 @@ services:
     environment:
       - OMR_ENGINE=mock           # "mock" für Dev, "oemer" für Produktion
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: builder            # Dev: Vite Dev-Server
     ports:
       - "5173:5173"
     volumes:
       - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://backend:8000
+    command: npm run dev -- --host 0.0.0.0
 
 volumes: {}
