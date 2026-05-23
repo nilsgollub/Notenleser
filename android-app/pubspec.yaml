@@ -1,0 +1,37 @@
+name: notenleser
+description: Notenblatt scannen und Melodie abspielen – mit Karaoke-Modus.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Bild-Aufnahme (Kamera + Galerie)
+  image_picker: ^1.1.2
+
+  # HTTP für Claude Vision API (Dart hat kein offizielles Anthropic-SDK)
+  http: ^1.2.2
+
+  # Lokale Bibliothek
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  path_provider: ^2.1.4
+
+  # Audio-Wiedergabe (synthetisierte WAV im Speicher)
+  audioplayers: ^6.1.0
+
+  # Einstellungen (API-Key)
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
