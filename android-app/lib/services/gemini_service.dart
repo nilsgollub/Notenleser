@@ -4,10 +4,12 @@ import 'package:http/http.dart' as http;
 import '../models/song.dart';
 import 'omr_service.dart';
 
-class ClaudeService implements OmrService {
-  static const _endpoint = 'https://api.anthropic.com/v1/messages';
-  static const _model = 'claude-opus-4-7';
-  static const _anthropicVersion = '2023-06-01';
+/// Optical Music Recognition über die Gemini 2.0 Flash API (kostenloser Tier:
+/// 15 req/min, 1 500 req/Tag). Kein Server nötig, kein lokales Modell.
+class GeminiService implements OmrService {
+  static const _model = 'gemini-2.0-flash';
+  static const _baseUrl =
+      'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent';
 
   static const _prompt = '''
 Du bist ein Experte für Notenlesen (Optical Music Recognition).
@@ -49,45 +51,36 @@ Regeln:
   Future<Song> recognize({required String apiKey, required File imageFile}) async {
     final bytes = await imageFile.readAsBytes();
     final base64Image = base64Encode(bytes);
-    final mediaType =
+    final mimeType =
         imageFile.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
     final body = jsonEncode({
-      'model': _model,
-      'max_tokens': 16000,
-      'thinking': {'type': 'adaptive'},
-      'output_config': {'effort': 'high'},
-      'messages': [
+      'contents': [
         {
-          'role': 'user',
-          'content': [
+          'parts': [
             {
-              'type': 'image',
-              'source': {
-                'type': 'base64',
-                'media_type': mediaType,
-                'data': base64Image,
-              },
+              'inline_data': {'mime_type': mimeType, 'data': base64Image},
             },
-            {'type': 'text', 'text': _prompt},
+            {'text': _prompt},
           ],
         },
       ],
+      'generationConfig': {
+        'temperature': 0,
+        'responseMimeType': 'application/json',
+      },
     });
 
     http.Response res;
     try {
+      final uri = Uri.parse('$_baseUrl?key=$apiKey');
       res = await http
           .post(
-            Uri.parse(_endpoint),
-            headers: {
-              'x-api-key': apiKey,
-              'anthropic-version': _anthropicVersion,
-              'content-type': 'application/json',
-            },
+            uri,
+            headers: {'content-type': 'application/json'},
             body: body,
           )
-          .timeout(const Duration(seconds: 180));
+          .timeout(const Duration(seconds: 120));
     } on SocketException {
       throw OmrException(
           'Keine Internetverbindung. Die Notenerkennung braucht Online-Zugang.');
@@ -96,14 +89,16 @@ Regeln:
           'Zeitüberschreitung oder Netzwerkfehler. Bitte erneut versuchen.');
     }
 
-    if (res.statusCode == 401) {
-      throw OmrException('Claude API-Key ungültig. Bitte in den Einstellungen prüfen.');
+    if (res.statusCode == 400 || res.statusCode == 403) {
+      throw OmrException('Gemini API-Key ungültig. Bitte in den Einstellungen prüfen.');
     }
     if (res.statusCode == 429) {
-      throw OmrException('Zu viele Anfragen (Rate Limit). Kurz warten und erneut versuchen.');
+      throw OmrException(
+          'Gemini-Tageslimit erreicht (1 500 kostenlose Anfragen/Tag). '
+          'Morgen wieder verfügbar oder auf Claude wechseln.');
     }
     if (res.statusCode >= 500) {
-      throw OmrException('Server-Fehler bei Anthropic (${res.statusCode}). Später erneut versuchen.');
+      throw OmrException('Server-Fehler bei Google (${res.statusCode}). Später erneut versuchen.');
     }
     if (res.statusCode != 200) {
       final detail = _extractErrorMessage(res.body);
@@ -124,19 +119,20 @@ Regeln:
 
   String _extractText(String responseBody) {
     final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-    final content = decoded['content'] as List? ?? const [];
-    final buffer = StringBuffer();
-    for (final block in content) {
-      if (block is Map && block['type'] == 'text') {
-        buffer.write(block['text'] ?? '');
-      }
+    final candidates = decoded['candidates'] as List? ?? const [];
+    if (candidates.isEmpty) {
+      throw OmrException('Gemini hat keine Antwort geliefert.');
     }
-    return buffer.toString();
+    final parts =
+        (candidates.first as Map)['content']?['parts'] as List? ?? const [];
+    return parts
+        .whereType<Map>()
+        .map((p) => p['text']?.toString() ?? '')
+        .join();
   }
 
   Map<String, dynamic> _parseJsonObject(String text) {
     var t = text.trim();
-    t = t.replaceAll(RegExp(r'^```(?:json)?', multiLine: false), '').trim();
     final start = t.indexOf('{');
     final end = t.lastIndexOf('}');
     if (start < 0 || end <= start) {

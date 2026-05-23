@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import '../models/song.dart';
 import '../services/claude_service.dart';
 import '../services/database_service.dart';
+import '../services/gemini_service.dart';
+import '../services/omr_service.dart';
 import '../services/settings_service.dart';
 import '../theme.dart';
 import 'player_screen.dart';
@@ -21,7 +23,6 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen> {
   final _picker = ImagePicker();
-  final _claude = ClaudeService();
   final _settings = SettingsService();
 
   File? _image;
@@ -29,18 +30,28 @@ class _ScanScreenState extends State<ScanScreen> {
   String _error = '';
   Song? _result;
   bool _hasKey = false;
+  OmrProvider _provider = OmrProvider.gemini;
 
   @override
   void initState() {
     super.initState();
-    _settings.hasApiKey().then((v) => setState(() => _hasKey = v));
+    _refreshSettings();
+  }
+
+  Future<void> _refreshSettings() async {
+    final has = await _settings.hasActiveApiKey();
+    final provider = await _settings.getProvider();
+    if (mounted) setState(() {
+      _hasKey = has;
+      _provider = provider;
+    });
   }
 
   Future<void> _pick(ImageSource source) async {
     try {
       final picked = await _picker.pickImage(
         source: source,
-        maxWidth: 2400, // hochauflösend für gute Erkennung (Opus 4.7 bis 2576px)
+        maxWidth: 2400,
         imageQuality: 92,
       );
       if (picked == null) return;
@@ -58,7 +69,7 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _scan() async {
-    final apiKey = await _settings.getApiKey();
+    final apiKey = await _settings.getActiveApiKey();
     if (apiKey == null) {
       _openSettings();
       return;
@@ -70,15 +81,18 @@ class _ScanScreenState extends State<ScanScreen> {
       _error = '';
     });
 
+    final OmrService service =
+        _provider == OmrProvider.gemini ? GeminiService() : ClaudeService();
+
     try {
-      final song = await _claude.recognize(apiKey: apiKey, imageFile: _image!);
+      final song = await service.recognize(apiKey: apiKey, imageFile: _image!);
       final saved = await DatabaseService.instance.insert(song);
       if (!mounted) return;
       setState(() {
         _result = saved;
         _stage = _Stage.done;
       });
-    } on ClaudeException catch (e) {
+    } on OmrException catch (e) {
       if (!mounted) return;
       setState(() {
         _stage = _Stage.error;
@@ -97,8 +111,7 @@ class _ScanScreenState extends State<ScanScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
-    final has = await _settings.hasApiKey();
-    if (mounted) setState(() => _hasKey = has);
+    await _refreshSettings();
   }
 
   void _reset() => setState(() {
@@ -197,6 +210,27 @@ class _ScanScreenState extends State<ScanScreen> {
           icon: const Icon(Icons.auto_awesome),
           label: const Text('Noten erkennen'),
         ),
+        const SizedBox(height: 12),
+        _providerIndicator(),
+      ],
+    );
+  }
+
+  Widget _providerIndicator() {
+    final isGemini = _provider == OmrProvider.gemini;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          isGemini ? Icons.auto_awesome_outlined : Icons.psychology_outlined,
+          size: 14,
+          color: AppColors.textSecondary,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          isGemini ? 'Gemini 2.0 Flash (kostenlos)' : 'Claude Opus (kostenpflichtig)',
+          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
       ],
     );
   }
@@ -222,19 +256,24 @@ class _ScanScreenState extends State<ScanScreen> {
       );
 
   Widget _processing() {
-    return const Center(
+    final isGemini = _provider == OmrProvider.gemini;
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
+          const SizedBox(
               width: 44, height: 44, child: CircularProgressIndicator(strokeWidth: 3)),
-          SizedBox(height: 20),
-          Text('Noten werden gelesen…',
+          const SizedBox(height: 20),
+          const Text('Noten werden gelesen…',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          SizedBox(height: 8),
-          Text('Claude analysiert das Notenblatt (kann ~30 Sek. dauern).',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const SizedBox(height: 8),
+          Text(
+            isGemini
+                ? 'Gemini analysiert das Notenblatt (kann ~15 Sek. dauern).'
+                : 'Claude analysiert das Notenblatt (kann ~30 Sek. dauern).',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
         ],
       ),
     );
