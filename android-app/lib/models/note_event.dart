@@ -6,24 +6,29 @@ import 'dart:math' as math;
 /// oder "REST" für eine Pause.
 /// [durationBeats] ist die Dauer in Schlägen (1.0 = Viertel, 0.5 = Achtel, 2.0 = Halbe).
 /// [measure] ist die 1-basierte Taktnummer.
+/// [lyric] ist die zugehörige Silbe/Wort aus dem Notentext (optional).
 class NoteEvent {
   final String pitch;
   final double durationBeats;
   final int measure;
+  final String? lyric;
 
   const NoteEvent({
     required this.pitch,
     required this.durationBeats,
     required this.measure,
+    this.lyric,
   });
 
   bool get isRest => pitch.toUpperCase() == 'REST';
 
   factory NoteEvent.fromJson(Map<String, dynamic> json) {
+    final raw = (json['lyric'] ?? '').toString().trim();
     return NoteEvent(
       pitch: (json['pitch'] ?? 'REST').toString(),
       durationBeats: (json['duration_beats'] as num?)?.toDouble() ?? 1.0,
       measure: (json['measure'] as num?)?.toInt() ?? 0,
+      lyric: raw.isEmpty ? null : raw,
     );
   }
 
@@ -31,6 +36,7 @@ class NoteEvent {
         'pitch': pitch,
         'duration_beats': durationBeats,
         'measure': measure,
+        if (lyric != null) 'lyric': lyric,
       };
 
   /// MIDI-Notennummer (A4 = 69). Pausen liefern -1.

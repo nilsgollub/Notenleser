@@ -35,7 +35,7 @@ danach, in genau dieser Struktur:
   "time_signature": "Taktart, z. B. 4/4 oder 3/4",
   "tempo_bpm": 100,
   "notes": [
-    { "pitch": "C4", "duration_beats": 1.0, "measure": 1 }
+    { "pitch": "C4", "duration_beats": 1.0, "measure": 1, "lyric": "Hän-" }
   ]
 }
 
@@ -46,6 +46,10 @@ Regeln:
   Viertel = 1.0, Achtel = 0.5, Sechzehntel = 0.25. Punktierungen entsprechend
   (punktierte Viertel = 1.5).
 - measure: 1-basierte Taktnummer.
+- lyric: Die unter der Note gedruckte Silbe oder das Wort, EXAKT wie im Notenblatt
+  (inklusive Trennstriche, z. B. "Hän-", "sel", "und"). Lasse das Feld weg (oder
+  leerer String) wenn keine Lyrik für diese Note vorhanden ist. Pausen haben nie
+  eine Lyrik. Hat das Stück generell keinen Text, lasse lyric bei allen Noten weg.
 - Liste die Noten in der Reihenfolge auf, in der sie gespielt werden.
 - tempo_bpm: falls keine Tempoangabe gedruckt ist, schätze ein passendes Tempo
   für die Stilrichtung (Kinderlieder meist 90–120).

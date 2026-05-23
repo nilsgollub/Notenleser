@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import '../models/song.dart';
 import '../services/audio_service.dart';
 import '../theme.dart';
+import '../widgets/lyrics_view.dart';
 import '../widgets/piano_roll.dart';
 import '../widgets/player_controls.dart';
 
@@ -96,6 +97,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.dispose();
   }
 
+  bool _hasLyrics(Song song) => song.notes.any((n) => n.lyric != null);
+
   void _playPause() => _isPlaying ? _audio.pause() : _audio.play();
 
   void _restart() {
@@ -142,15 +145,24 @@ class _PlayerScreenState extends State<PlayerScreen>
             child: _ready
                 ? Container(
                     color: AppColors.bg,
-                    child: PianoRoll(
-                      notes: song.notes,
-                      startTimes: _audio.startTimes,
-                      totalSeconds: _audio.totalSeconds,
-                      effectiveBpm: _audio.effectiveBpm,
-                      currentSeconds: _displaySeconds,
-                      currentIndex: _audio.currentNoteIndex(_displaySeconds),
-                      karaokeOn: _karaoke,
-                    ),
+                    child: _hasLyrics(song)
+                        ? LyricsView(
+                            notes: song.notes,
+                            currentIndex: _karaoke
+                                ? _audio.currentNoteIndex(_displaySeconds)
+                                : -1,
+                            karaokeOn: _karaoke,
+                          )
+                        : PianoRoll(
+                            notes: song.notes,
+                            startTimes: _audio.startTimes,
+                            totalSeconds: _audio.totalSeconds,
+                            effectiveBpm: _audio.effectiveBpm,
+                            currentSeconds: _displaySeconds,
+                            currentIndex:
+                                _audio.currentNoteIndex(_displaySeconds),
+                            karaokeOn: _karaoke,
+                          ),
                   )
                 : const Center(child: CircularProgressIndicator()),
           ),
