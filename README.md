@@ -1,147 +1,137 @@
 # Notenleser
 
-Scanne oder fotografiere ein Notenblatt – die App erkennt die Melodie und spielt sie ab. Gleichzeitig wird eine Bibliothek aller erfassten Lieder aufgebaut.
+> Notenblatt fotografieren – Melodie abspielen. Inkl. Karaoke-Modus und Lied-Bibliothek.
 
-## Zielplattformen
+---
 
-| Plattform | Deployment |
+## Inhaltsverzeichnis
+
+1. [Funktionen](#funktionen)
+2. [Schnellstart](#schnellstart)
+3. [Plattformen](#plattformen)
+4. [Architektur-Überblick](#architektur-überblick)
+5. [Konfiguration](#konfiguration)
+6. [Weiterführende Dokumentation](#weiterführende-dokumentation)
+
+---
+
+## Funktionen
+
+| Feature | Beschreibung |
 |---|---|
-| Android-Smartphone | PWA (installierbar) oder Capacitor-App |
-| Home Assistant | Addon mit Ingress-Panel |
+| **Scan** | Notenblatt per Kamera oder Datei-Upload erfassen |
+| **OMR** | Automatische Notenerkennung (Optical Music Recognition) via *oemer* |
+| **Wiedergabe** | WAV-Audio (FluidSynth) oder Browser-Synthesizer (Tone.js) |
+| **Karaoke-Modus** | Goldener Cursor folgt der Melodie im Notenblatt in Echtzeit |
+| **Tempo-Kontrolle** | Wiedergabegeschwindigkeit von 40 % bis 150 % |
+| **Bibliothek** | Alle Lieder mit Metadaten (Tonart, Takt, Tempo, Datum) |
+| **Export** | MIDI, MusicXML und WAV herunterladen |
+| **PWA** | Installierbar auf Android wie eine native App |
+| **Home Assistant** | Als Addon mit Ingress-Panel integrierbar |
 
 ---
 
-## Architektur
+## Schnellstart
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (PWA / Vue 3)                   │
-│  Kamera / Datei-Upload  →  Bibliothek  →  Wiedergabe-Player     │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ REST + WebSocket
-┌────────────────────────────▼────────────────────────────────────┐
-│                      BACKEND (Python / FastAPI)                  │
-│                                                                  │
-│  ┌─────────────┐   ┌──────────────┐   ┌────────────────────┐    │
-│  │ OMR-Service │   │ Music-Service│   │  Library-Service   │    │
-│  │  (oemer /   │   │ (music21 +   │   │ (SQLite + Dateien) │    │
-│  │  OpenCV)    │→  │  FluidSynth) │→  │                    │    │
-│  └─────────────┘   └──────────────┘   └────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-                             │ Docker
-┌──────────────┐    ┌────────┴──────────┐
-│  Android     │    │  Home Assistant   │
-│  (PWA/APK)   │    │  Addon            │
-└──────────────┘    └───────────────────┘
-```
+### Voraussetzungen
 
-### Technologie-Stack
+- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/install/)
 
-| Schicht | Technologie | Begründung |
-|---|---|---|
-| OMR (Notenerkennung) | **oemer** (Python) | Pure-Python, Deep-Learning, liefert MusicXML |
-| Musikverarbeitung | **music21** | MusicXML → MIDI, Tonart/Tempo-Analyse |
-| Audio-Synthese | **FluidSynth** + Soundfont | Hochwertige MIDI→Audio-Konvertierung |
-| Backend API | **FastAPI** | Async, automatische OpenAPI-Doku |
-| Datenbank | **SQLite** + SQLModel | Kein externer DB-Server nötig |
-| Datei-Storage | Lokales Verzeichnis | Bilder, MusicXML, MIDI, Audio |
-| Frontend | **Vue 3** + Vite (PWA) | Funktioniert als HA-Panel + Android |
-| Containerisierung | **Docker** / docker-compose | Gleiche Basis für HA-Addon und Standalone |
-
----
-
-## Umsetzungsplan
-
-### Phase 1 – Fundament (Backend-Skeleton)
-- [x] Projektstruktur anlegen
-- [ ] FastAPI-App mit Health-Endpoint
-- [ ] SQLite-Datenbankmodelle (Song, ScanJob)
-- [ ] Datei-Upload-Endpoint (Bild entgegennehmen)
-- [ ] Docker-Setup (Backend)
-
-### Phase 2 – OMR-Integration (Notenerkennung)
-- [ ] Bild-Vorverarbeitung mit OpenCV (Entzerrung, Kontrast, Graustufen)
-- [ ] oemer einbinden → MusicXML-Output
-- [ ] Fallback: einfache Linienerkennung für Grundtöne (OpenCV)
-- [ ] MusicXML validieren und in DB speichern
-
-### Phase 3 – Musikwiedergabe
-- [ ] music21: MusicXML → MIDI
-- [ ] FluidSynth: MIDI → WAV/MP3
-- [ ] Streaming-Endpoint für Audio
-- [ ] WebSocket für Echtzeit-Fortschrittsanzeige beim Scan
-
-### Phase 4 – Lied-Bibliothek
-- [ ] CRUD-API für Songs
-- [ ] Thumbnail-Generierung aus Scan-Bild
-- [ ] Suche nach Titel/Datum/Tonart
-- [ ] Export als MIDI / MusicXML
-
-### Phase 5 – Frontend (Vue 3 PWA)
-- [ ] Kamera-Capture + Datei-Upload-UI
-- [ ] Scan-Fortschrittsanzeige (WebSocket)
-- [ ] Noten-Viewer (OpenSheetMusicDisplay)
-- [ ] Audio-Player mit Play/Pause/Tempo
-- [ ] Bibliotheks-Ansicht mit Suche
-- [ ] PWA-Manifest (installierbar auf Android)
-
-### Phase 6 – Plattform-Deployment
-- [ ] Home Assistant Addon (config.yaml, Ingress)
-- [ ] Android: PWA-Installation oder Capacitor-Wrapping
-- [ ] CI/CD (GitHub Actions)
-
----
-
-## Schnellstart (Entwicklung)
+### Starten
 
 ```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-```bash
-# Alles via Docker
+git clone https://github.com/nilsgollub/notenleser.git
+cd notenleser
 docker-compose up
 ```
 
+| Dienst | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API (Swagger) | http://localhost:8000/docs |
+
+### Erstes Lied scannen
+
+1. Browser öffnen → http://localhost:5173
+2. Unten auf **Scan** (Kamera-Symbol) tippen
+3. Notenbild hochladen oder Kamera öffnen
+4. Warten bis die Fortschrittsanzeige „Fertig!" zeigt
+5. Auf **Jetzt anhören** tippen
+6. Player öffnet sich → **★ Karaoke** aktivieren
+
 ---
 
-## Verzeichnisstruktur
+## Plattformen
+
+### Android (PWA)
+
+1. http://\<server-ip\>:5173 in Chrome öffnen
+2. Menü → *Zum Startbildschirm hinzufügen*
+3. App erscheint wie eine native Anwendung
+
+→ Ausführliche Anleitung: [docs/android.md](docs/android.md)
+
+### Home Assistant Addon
+
+1. Repository zur HA-Addon-Store-Liste hinzufügen
+2. Addon *Notenleser* installieren und starten
+3. Panel erscheint automatisch in der Seitenleiste
+
+→ Ausführliche Anleitung: [docs/homeassistant.md](docs/homeassistant.md)
+
+---
+
+## Architektur-Überblick
 
 ```
-Notenleser/
-├── backend/
-│   ├── app/
-│   │   ├── main.py          # FastAPI Entry-Point
-│   │   ├── api/             # Router (upload, songs, playback)
-│   │   ├── core/            # Config, Datenbank-Setup
-│   │   ├── models/          # SQLModel-Tabellen
-│   │   └── services/        # OMR, Music, Library
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # Wiederverwendbare UI-Teile
-│   │   ├── views/           # Seiten (Scan, Library, Player)
-│   │   └── stores/          # Pinia State Management
-│   ├── package.json
-│   └── Dockerfile
-├── homeassistant-addon/
-│   ├── config.yaml          # HA Addon-Manifest
-│   ├── Dockerfile
-│   └── run.sh
-├── data/                    # Laufzeit-Daten (gitignored)
-│   ├── db/
-│   ├── uploads/
-│   └── audio/
-├── docs/
-│   └── architecture.md
-└── docker-compose.yml
+┌─────────────────────────────────────────────────────────────┐
+│                  Frontend  (Vue 3 PWA)                      │
+│   Scan  ──►  Fortschritt  ──►  Player  ──►  Bibliothek      │
+│                        ▲  Karaoke-Cursor  ▲                 │
+└──────────────────────┬──────────────────────────────────────┘
+                       │  REST + WebSocket
+┌──────────────────────▼──────────────────────────────────────┐
+│                 Backend  (FastAPI / Python)                  │
+│                                                             │
+│   Upload ──► OMR (oemer) ──► music21 ──► FluidSynth         │
+│               [MusicXML]     [MIDI]      [WAV + Timing]     │
+│                                                             │
+│   SQLite-Bibliothek  |  /data  (Bilder, Audio, XML)         │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+→ Detaillierte Architektur-Entscheidungen: [docs/architecture.md](docs/architecture.md)
+
+---
+
+## Konfiguration
+
+Alle Einstellungen können per Umgebungsvariable oder `.env`-Datei im `backend/`-Verzeichnis gesetzt werden.
+
+| Variable | Standard | Beschreibung |
+|---|---|---|
+| `OMR_ENGINE` | `mock` | `oemer` für Produktion, `mock` für Entwicklung |
+| `DATA_DIR` | `/data` | Basis-Verzeichnis für alle Laufzeit-Daten |
+| `SOUNDFONT_PATH` | `/usr/share/sounds/sf2/FluidR3_GM.sf2` | Pfad zur FluidSynth-Soundfont |
+| `DB_URL` | `sqlite+aiosqlite:////data/db/notenleser.db` | Datenbank-URL |
+
+**Beispiel `.env`:**
+```dotenv
+OMR_ENGINE=oemer
+DATA_DIR=/mnt/music-data
+SOUNDFONT_PATH=/opt/soundfonts/Steinway.sf2
+```
+
+---
+
+## Weiterführende Dokumentation
+
+| Dokument | Inhalt |
+|---|---|
+| [docs/setup.md](docs/setup.md) | Detaillierte Installationsanleitung (Docker, nativ, Produktion) |
+| [docs/architecture.md](docs/architecture.md) | Technische Architektur-Entscheidungen |
+| [docs/api.md](docs/api.md) | Vollständige API-Referenz |
+| [docs/karaoke.md](docs/karaoke.md) | Karaoke-Modus: Funktionsweise und Feintuning |
+| [docs/homeassistant.md](docs/homeassistant.md) | Home Assistant Addon installieren |
+| [docs/android.md](docs/android.md) | Als Android-App installieren |
+| [docs/development.md](docs/development.md) | Entwicklungsumgebung aufsetzen, Beitragen |
