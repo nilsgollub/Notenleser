@@ -1,18 +1,16 @@
-# Laufzeit-Daten
-data/
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.g.dart
 
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-*.egg-info/
-dist/
-.pytest_cache/
-
-# Node / Frontend
-node_modules/
-frontend/dist/
-frontend/.vite/
+# Android
+android-app/android/local.properties
+android-app/android/.gradle/
+android-app/android/app/debug/
+android-app/android/app/profile/
+android-app/android/app/release/
 
 # IDE
 .vscode/

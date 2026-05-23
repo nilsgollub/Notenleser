@@ -1,147 +1,101 @@
 # Notenleser
 
-> Notenblatt fotografieren – Melodie abspielen. Inkl. Karaoke-Modus und Lied-Bibliothek.
+> Notenblatt fotografieren – Melodie abspielen. Mit Karaoke-Modus und Lied-Bibliothek.
 
-Es gibt **zwei Varianten**:
-
-| Variante | Pfad | Notenerkennung | Wann nutzen |
-|---|---|---|---|
-| **Android-App (eigenständig)** | [`android-app/`](android-app/) | Claude Vision API (`claude-opus-4-7`) | Direkt auf dem Smartphone, kein eigener Server nötig |
-| **Server / Home Assistant** | [`backend/`](backend/) + [`frontend/`](frontend/) | oemer (lokal) / Mock | Zentrale Bibliothek im Heimnetz, HA-Addon |
-
-Die folgende Doku beschreibt die **Server-/HA-Variante**. Für die standalone
-Android-App siehe [android-app/README.md](android-app/README.md).
+Eigenständige Android-App (Flutter): Die Notenerkennung läuft über die **Claude Vision API**
+(`claude-opus-4-7`), Wiedergabe und Karaoke-Cursor laufen vollständig **offline auf dem Gerät**.
 
 ---
 
-## Inhaltsverzeichnis
+## Wie es funktioniert
 
-1. [Funktionen](#funktionen)
-2. [Schnellstart](#schnellstart)
-3. [Plattformen](#plattformen)
-4. [Architektur-Überblick](#architektur-überblick)
-5. [Konfiguration](#konfiguration)
-6. [Weiterführende Dokumentation](#weiterführende-dokumentation)
+```
+Foto (Kamera/Galerie)
+        │
+        ▼
+Claude Vision API  (claude-opus-4-7, High-Res-Vision)
+        │  → strukturiertes JSON: Titel, Tonart, Takt, Tempo, Noten[]
+        ▼
+NoteEvent-Liste  ──►  WAV-Synthese (pure Dart, offline)  ──►  audioplayers
+        │                                                          │
+        └──────────────►  Piano-Roll-Karaoke-Cursor  ◄────────────┘
+                                (folgt der Wiedergabeposition)
+        │
+        ▼
+SQLite-Bibliothek (lokal auf dem Gerät)
+```
+
+- **OMR (Notenerkennung):** Das Foto wird base64-kodiert an die Claude Messages API geschickt.
+  Per Structured Outputs kommt garantiert valides JSON zurück.
+- **Audio:** Aus den Noten wird im Gerät eine WAV-Datei synthetisiert (Sinus + Obertöne + ADSR-Hüllkurve). Kein Soundfont, kein Server nötig.
+- **Karaoke:** Eine Piano-Roll zeichnet die Melodie; ein goldener Cursor folgt der Audio-Position.
+- **Bibliothek:** Alle erfassten Lieder werden lokal in SQLite gespeichert.
 
 ---
 
-## Funktionen
+## Setup
 
-| Feature | Beschreibung |
-|---|---|
-| **Scan** | Notenblatt per Kamera oder Datei-Upload erfassen |
-| **OMR** | Automatische Notenerkennung (Optical Music Recognition) via *oemer* |
-| **Wiedergabe** | WAV-Audio (FluidSynth) oder Browser-Synthesizer (Tone.js) |
-| **Karaoke-Modus** | Goldener Cursor folgt der Melodie im Notenblatt in Echtzeit |
-| **Tempo-Kontrolle** | Wiedergabegeschwindigkeit von 40 % bis 150 % |
-| **Bibliothek** | Alle Lieder mit Metadaten (Tonart, Takt, Tempo, Datum) |
-| **Export** | MIDI, MusicXML und WAV herunterladen |
-| **PWA** | Installierbar auf Android wie eine native App |
-| **Home Assistant** | Als Addon mit Ingress-Panel integrierbar |
+### 1. Flutter installieren
 
----
+[Flutter SDK](https://docs.flutter.dev/get-started/install) (≥ 3.19) und Android Studio / Android SDK einrichten.
 
-## Schnellstart
-
-### Voraussetzungen
-
-- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/install/)
-
-### Starten
+### 2. Plattform-Gerüst erzeugen
 
 ```bash
-git clone https://github.com/nilsgollub/notenleser.git
-cd notenleser
-docker-compose up
+cd android-app
+flutter create .          # ergänzt android/, fehlende Plattform-Dateien
 ```
 
-| Dienst | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| API (Swagger) | http://localhost:8000/docs |
+`flutter create .` überschreibt nicht die vorhandenen `lib/`-Dateien oder die `pubspec.yaml`.
 
-### Erstes Lied scannen
+### 3. Abhängigkeiten holen & starten
 
-1. Browser öffnen → http://localhost:5173
-2. Unten auf **Scan** (Kamera-Symbol) tippen
-3. Notenbild hochladen oder Kamera öffnen
-4. Warten bis die Fortschrittsanzeige „Fertig!" zeigt
-5. Auf **Jetzt anhören** tippen
-6. Player öffnet sich → **★ Karaoke** aktivieren
-
----
-
-## Plattformen
-
-### Android (PWA)
-
-1. http://\<server-ip\>:5173 in Chrome öffnen
-2. Menü → *Zum Startbildschirm hinzufügen*
-3. App erscheint wie eine native Anwendung
-
-→ Ausführliche Anleitung: [docs/android.md](docs/android.md)
-
-### Home Assistant Addon
-
-1. Repository zur HA-Addon-Store-Liste hinzufügen
-2. Addon *Notenleser* installieren und starten
-3. Panel erscheint automatisch in der Seitenleiste
-
-→ Ausführliche Anleitung: [docs/homeassistant.md](docs/homeassistant.md)
-
----
-
-## Architektur-Überblick
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Frontend  (Vue 3 PWA)                      │
-│   Scan  ──►  Fortschritt  ──►  Player  ──►  Bibliothek      │
-│                        ▲  Karaoke-Cursor  ▲                 │
-└──────────────────────┬──────────────────────────────────────┘
-                       │  REST + WebSocket
-┌──────────────────────▼──────────────────────────────────────┐
-│                 Backend  (FastAPI / Python)                  │
-│                                                             │
-│   Upload ──► OMR (oemer) ──► music21 ──► FluidSynth         │
-│               [MusicXML]     [MIDI]      [WAV + Timing]     │
-│                                                             │
-│   SQLite-Bibliothek  |  /data  (Bilder, Audio, XML)         │
-└─────────────────────────────────────────────────────────────┘
+```bash
+flutter pub get
+flutter run               # Gerät per USB oder Emulator
 ```
 
-→ Detaillierte Architektur-Entscheidungen: [docs/architecture.md](docs/architecture.md)
+### 4. APK bauen
 
----
-
-## Konfiguration
-
-Alle Einstellungen können per Umgebungsvariable oder `.env`-Datei im `backend/`-Verzeichnis gesetzt werden.
-
-| Variable | Standard | Beschreibung |
-|---|---|---|
-| `OMR_ENGINE` | `mock` | `oemer` für Produktion, `mock` für Entwicklung |
-| `DATA_DIR` | `/data` | Basis-Verzeichnis für alle Laufzeit-Daten |
-| `SOUNDFONT_PATH` | `/usr/share/sounds/sf2/FluidR3_GM.sf2` | Pfad zur FluidSynth-Soundfont |
-| `DB_URL` | `sqlite+aiosqlite:////data/db/notenleser.db` | Datenbank-URL |
-
-**Beispiel `.env`:**
-```dotenv
-OMR_ENGINE=oemer
-DATA_DIR=/mnt/music-data
-SOUNDFONT_PATH=/opt/soundfonts/Steinway.sf2
+```bash
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
 ```
 
 ---
 
-## Weiterführende Dokumentation
+## API-Key einrichten
 
-| Dokument | Inhalt |
-|---|---|
-| [docs/setup.md](docs/setup.md) | Detaillierte Installationsanleitung (Docker, nativ, Produktion) |
-| [docs/architecture.md](docs/architecture.md) | Technische Architektur-Entscheidungen |
-| [docs/api.md](docs/api.md) | Vollständige API-Referenz |
-| [docs/karaoke.md](docs/karaoke.md) | Karaoke-Modus: Funktionsweise und Feintuning |
-| [docs/homeassistant.md](docs/homeassistant.md) | Home Assistant Addon installieren |
-| [docs/android.md](docs/android.md) | Als Android-App installieren |
-| [docs/development.md](docs/development.md) | Entwicklungsumgebung aufsetzen, Beitragen |
+Beim ersten Start fragt die App nach einem **Anthropic API-Key** (`sk-ant-...`).
+Erhältlich unter https://console.anthropic.com.
+Er wird lokal in `shared_preferences` gespeichert und nur an `api.anthropic.com` gesendet.
+
+---
+
+## Projektstruktur
+
+```
+android-app/
+├── pubspec.yaml
+├── lib/
+│   ├── main.dart                  App-Einstieg, Routing, Theme
+│   ├── theme.dart                 Dunkles Farbschema
+│   ├── models/
+│   │   ├── note_event.dart        Eine Note (Tonhöhe, Dauer, Takt)
+│   │   └── song.dart              Lied + Metadaten + Noten
+│   ├── services/
+│   │   ├── settings_service.dart  API-Key speichern/laden
+│   │   ├── database_service.dart  SQLite-Bibliothek
+│   │   ├── claude_service.dart    Claude Vision API (OMR)
+│   │   └── audio_service.dart     WAV-Synthese + Wiedergabe + Karaoke-Timeline
+│   ├── screens/
+│   │   ├── library_screen.dart    Bibliothek + Suche
+│   │   ├── scan_screen.dart       Foto aufnehmen + Fortschritt
+│   │   ├── player_screen.dart     Player + Karaoke
+│   │   └── settings_screen.dart   API-Key-Eingabe
+│   └── widgets/
+│       ├── song_tile.dart         Listeneintrag in der Bibliothek
+│       ├── piano_roll.dart        Karaoke-Visualisierung (CustomPainter)
+│       └── player_controls.dart   Play/Pause/Tempo/Karaoke-Schalter
+└── android/app/src/main/AndroidManifest.xml
+```

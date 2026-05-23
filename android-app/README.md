@@ -4,12 +4,6 @@ Eigenständige Android-App: Notenblatt fotografieren → Melodie abspielen → K
 Die Notenerkennung läuft über die **Claude Vision API** (Modell `claude-opus-4-7`),
 die Wiedergabe und der Karaoke-Cursor laufen vollständig **offline auf dem Gerät**.
 
-> Hinweis: Diese App ist die *standalone* Variante. Der `backend/` + `frontend/`
-> Code im Repo-Root bleibt die Server-/Home-Assistant-Variante. Beide teilen sich
-> dasselbe Grundkonzept, sind aber unabhängig.
-
----
-
 ## Wie es funktioniert
 
 ```
