@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,12 @@ from app.core.database import get_session
 from app.models.song import Song
 
 router = APIRouter(prefix="/playback", tags=["playback"])
+
+
+def _safe_filename(title: str, ext: str) -> str:
+    """Bereinigt den Titel für den Content-Disposition-Header."""
+    safe = re.sub(r'[^\w\s\-.]', '', title).strip() or "lied"
+    return f"{safe[:80]}{ext}"
 
 
 async def _get_song_or_404(song_id: int, session: AsyncSession) -> Song:
@@ -24,7 +31,11 @@ async def stream_audio(song_id: int, session: AsyncSession = Depends(get_session
     song = await _get_song_or_404(song_id, session)
     if not song.audio_path or not Path(song.audio_path).exists():
         raise HTTPException(404, "Audio-Datei nicht verfügbar – nur MIDI vorhanden")
-    return FileResponse(song.audio_path, media_type="audio/wav", filename=f"{song.title}.wav")
+    return FileResponse(
+        song.audio_path,
+        media_type="audio/wav",
+        filename=_safe_filename(song.title, ".wav"),
+    )
 
 
 @router.get("/{song_id}/midi")
@@ -32,7 +43,11 @@ async def download_midi(song_id: int, session: AsyncSession = Depends(get_sessio
     song = await _get_song_or_404(song_id, session)
     if not song.midi_path or not Path(song.midi_path).exists():
         raise HTTPException(404, "MIDI nicht verfügbar")
-    return FileResponse(song.midi_path, media_type="audio/midi", filename=f"{song.title}.mid")
+    return FileResponse(
+        song.midi_path,
+        media_type="audio/midi",
+        filename=_safe_filename(song.title, ".mid"),
+    )
 
 
 @router.get("/{song_id}/musicxml")
@@ -40,7 +55,11 @@ async def download_musicxml(song_id: int, session: AsyncSession = Depends(get_se
     song = await _get_song_or_404(song_id, session)
     if not song.musicxml_path or not Path(song.musicxml_path).exists():
         raise HTTPException(404, "MusicXML nicht verfügbar")
-    return FileResponse(song.musicxml_path, media_type="application/xml", filename=f"{song.title}.musicxml")
+    return FileResponse(
+        song.musicxml_path,
+        media_type="application/xml",
+        filename=_safe_filename(song.title, ".musicxml"),
+    )
 
 
 @router.get("/{song_id}/image")
@@ -49,7 +68,7 @@ async def get_image(song_id: int, session: AsyncSession = Depends(get_session)):
     if not song.scan_image_path or not Path(song.scan_image_path).exists():
         raise HTTPException(404, "Bild nicht verfügbar")
     suffix = Path(song.scan_image_path).suffix.lower()
-    media = {"jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(suffix, "image/jpeg")
+    media = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}.get(suffix, "image/jpeg")
     return FileResponse(song.scan_image_path, media_type=media)
 
 

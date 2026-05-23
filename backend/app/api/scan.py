@@ -6,7 +6,7 @@ import asyncio
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -18,6 +18,8 @@ router = APIRouter(prefix="/scan", tags=["scan"])
 
 _ws_connections: dict[str, WebSocket] = {}
 
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf", ".tiff", ".tif", ".bmp", ".webp"}
+
 
 @router.post("/upload", status_code=202)
 async def upload_scan(
@@ -25,12 +27,31 @@ async def upload_scan(
     title: str = Form(default=""),
     session: AsyncSession = Depends(get_session),
 ):
-    job_id_str = str(uuid.uuid4())
-    suffix = Path(file.filename or "scan.jpg").suffix or ".jpg"
-    image_path = settings.upload_dir / f"{job_id_str}{suffix}"
-    image_path.write_bytes(await file.read())
+    # Dateityp prüfen
+    suffix = Path(file.filename or "scan.jpg").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Nicht unterstütztes Dateiformat '{suffix}'. Erlaubt: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
 
-    song = Song(title=title or Path(file.filename or "Unbekannt").stem, scan_image_path=str(image_path))
+    # Dateigröße prüfen (Inhalt in einem Schritt lesen, dann Größe checken)
+    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Datei zu groß ({len(content) // (1024*1024)} MB). Maximum: {settings.max_upload_mb} MB",
+        )
+
+    job_id_str = str(uuid.uuid4())
+    image_path = settings.upload_dir / f"{job_id_str}{suffix}"
+    image_path.write_bytes(content)
+
+    # Titel: HTML-Sonderzeichen entfernen, Länge begrenzen
+    safe_title = (title or Path(file.filename or "Unbekannt").stem)[:200]
+
+    song = Song(title=safe_title, scan_image_path=str(image_path))
     session.add(song)
     job = ScanJob(status="pending")
     session.add(job)
@@ -38,7 +59,6 @@ async def upload_scan(
     await session.refresh(song)
     await session.refresh(job)
 
-    # Hintergrundtask bekommt eigene Session
     asyncio.create_task(_process_scan(job.id, song.id, image_path))
     return {"job_id": job.id, "song_id": song.id}
 
@@ -67,8 +87,8 @@ async def _process_scan(job_id: int, song_id: int, image_path: Path):
 
             await _notify(job_id, "metadata")
             meta = music_service.extract_metadata(musicxml_path)
-            song.title = meta.get("title") or song.title
-            song.composer = meta.get("composer")
+            song.title = (meta.get("title") or song.title)[:200]
+            song.composer = (meta.get("composer") or "")[:200] or None
             song.key_signature = meta.get("key_signature")
             song.time_signature = meta.get("time_signature")
             song.tempo_bpm = meta.get("tempo_bpm")
@@ -91,7 +111,7 @@ async def _process_scan(job_id: int, song_id: int, image_path: Path):
                 music_service.midi_to_audio(midi_path, audio_path)
                 song.audio_path = str(audio_path)
             except Exception:
-                pass  # MIDI als Fallback reicht
+                pass
 
             job.status = "done"
             await session.commit()
@@ -101,18 +121,20 @@ async def _process_scan(job_id: int, song_id: int, image_path: Path):
             job = await session.get(ScanJob, job_id)
             if job:
                 job.status = "error"
-                job.error_message = str(exc)
+                # Fehlermeldung intern speichern, aber nicht an den Client senden
+                job.error_message = str(exc)[:1000]
                 await session.commit()
-            await _notify(job_id, f"error:{exc}")
+            # Nur generische Meldung an den Client (kein Leak von Systempfaden)
+            await _notify(job_id, "error:Verarbeitungsfehler – bitte Bild-Qualität prüfen")
 
 
 @router.get("/job/{job_id}")
 async def get_job(job_id: int, session: AsyncSession = Depends(get_session)):
     job = await session.get(ScanJob, job_id)
     if not job:
-        from fastapi import HTTPException
         raise HTTPException(404, "Job nicht gefunden")
-    return job
+    # error_message (interne Details) nicht an Client zurückgeben
+    return {"id": job.id, "song_id": job.song_id, "status": job.status, "created_at": job.created_at}
 
 
 @router.websocket("/ws/{job_id}")

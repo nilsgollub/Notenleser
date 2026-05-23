@@ -12,11 +12,15 @@ class Settings(BaseSettings):
     musicxml_dir: Path = data_dir / "musicxml"
     db_url: str = "sqlite+aiosqlite:////data/db/notenleser.db"
 
-    # FluidSynth Soundfont (Standard-Pfad in Debian/Ubuntu)
     soundfont_path: Path = Path("/usr/share/sounds/sf2/FluidR3_GM.sf2")
+    omr_engine: str = "mock"
 
-    # OMR: "oemer" oder "mock" (für Tests ohne GPU)
-    omr_engine: str = "oemer"
+    # CORS: "*" für lokales Heimnetz, ansonsten konkrete Origins eintragen
+    # z. B.: cors_origins=["http://192.168.1.42:5173","http://homeassistant.local"]
+    cors_origins: list[str] = ["*"]
+
+    # Upload-Beschränkungen
+    max_upload_mb: int = 20
 
     class Config:
         env_file = ".env"
@@ -24,6 +28,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Verzeichnisse beim Import anlegen
 for _dir in (settings.upload_dir, settings.audio_dir, settings.musicxml_dir, settings.data_dir / "db"):
     _dir.mkdir(parents=True, exist_ok=True)
