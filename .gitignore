@@ -1,0 +1,27 @@
+# Laufzeit-Daten
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Umgebungsvariablen
+.env
+.env.local
+
+# macOS
+.DS_Store
