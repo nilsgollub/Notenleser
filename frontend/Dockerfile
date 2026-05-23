@@ -1,13 +1,18 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+# Stage: dev (docker-compose Entwicklung mit Hot-Reload)
+FROM node:20-alpine AS dev
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 COPY . .
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Stage: builder (Produktion)
+FROM dev AS builder
 RUN npm run build
 
-# Stage 2: Serve via nginx
-FROM nginx:alpine
+# Stage: production (nginx)
+FROM nginx:alpine AS production
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
