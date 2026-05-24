@@ -1,7 +1,7 @@
 import 'dart:io';
 import '../models/song.dart';
 
-enum OmrProvider { claude, gemini }
+enum OmrProvider { claude, gemini, backend }
 
 class OmrException implements Exception {
   final String message;

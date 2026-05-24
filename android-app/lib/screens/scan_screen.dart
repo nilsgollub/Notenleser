@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/song.dart';
+import '../services/backend_service.dart';
 import '../services/claude_service.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
@@ -83,9 +84,16 @@ class _ScanScreenState extends State<ScanScreen> {
       _error = '';
     });
 
-    final OmrService service = _provider == OmrProvider.gemini
-        ? GeminiService(model: await _settings.getGeminiModel())
-        : ClaudeService();
+    final OmrService service;
+    switch (_provider) {
+      case OmrProvider.gemini:
+        service = GeminiService(model: await _settings.getGeminiModel());
+      case OmrProvider.claude:
+        service = ClaudeService();
+      case OmrProvider.backend:
+        // apiKey holds the backend URL for this provider (see SettingsService)
+        service = BackendService(url: apiKey);
+    }
 
     try {
       final song = await service.recognize(apiKey: apiKey, imageFile: _image!);
@@ -220,23 +228,18 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _providerIndicator() {
-    final isGemini = _provider == OmrProvider.gemini;
+    final (icon, label) = switch (_provider) {
+      OmrProvider.gemini  => (Icons.auto_awesome_outlined, 'Gemini (kostenlos)'),
+      OmrProvider.claude  => (Icons.psychology_outlined,   'Claude Opus (kostenpflichtig)'),
+      OmrProvider.backend => (Icons.dns_outlined,          'Eigener Server (lokal)'),
+    };
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          isGemini ? Icons.auto_awesome_outlined : Icons.psychology_outlined,
-          size: 14,
-          color: AppColors.textSecondary,
-        ),
+        Icon(icon, size: 14, color: AppColors.textSecondary),
         const SizedBox(width: 4),
-        Text(
-          isGemini
-              ? 'Gemini 2.0 Flash (kostenlos)'
-              : 'Claude Opus (kostenpflichtig)',
-          style:
-              const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-        ),
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       ],
     );
   }
@@ -264,7 +267,11 @@ class _ScanScreenState extends State<ScanScreen> {
       );
 
   Widget _processing() {
-    final isGemini = _provider == OmrProvider.gemini;
+    final hint = switch (_provider) {
+      OmrProvider.gemini  => 'Gemini analysiert das Notenblatt (ca. 15 Sek.).',
+      OmrProvider.claude  => 'Claude analysiert das Notenblatt (ca. 30 Sek.).',
+      OmrProvider.backend => 'Lokale Notenerkennung läuft (2–5 Min. auf Raspberry Pi).',
+    };
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -277,14 +284,10 @@ class _ScanScreenState extends State<ScanScreen> {
           const Text('Noten werden gelesen…',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          Text(
-            isGemini
-                ? 'Gemini analysiert das Notenblatt (kann ~15 Sek. dauern).'
-                : 'Claude analysiert das Notenblatt (kann ~30 Sek. dauern).',
-            textAlign: TextAlign.center,
-            style:
-                const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          ),
+          Text(hint,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13)),
         ],
       ),
     );
