@@ -3,6 +3,17 @@ name: Build APK
 on:
   workflow_dispatch:
 
+# Benötigte GitHub Secrets (einmalig unter Settings → Secrets → Actions anlegen):
+#
+#   KEYSTORE_BASE64      – base64-kodierter Inhalt der notenleser.jks
+#                          Erzeugen: base64 -i notenleser.jks | tr -d '\n'
+#   KEYSTORE_PASSWORD    – Keystore-Passwort (storePassword)
+#   KEY_PASSWORD         – Key-Passwort     (keyPassword)
+#   KEY_ALIAS            – Key-Alias        (z. B. "notenleser")
+#
+# Ohne diese Secrets wird mit dem zufälligen Debug-Key gebaut
+# (Updates dann nicht ohne Deinstallation möglich).
+
 jobs:
   build-apk:
     name: Flutter APK bauen
@@ -24,6 +35,26 @@ jobs:
       - name: Abhängigkeiten installieren
         working-directory: android-app
         run: flutter pub get
+
+      - name: Keystore einrichten
+        env:
+          KEYSTORE_BASE64:   ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Keystore gefunden – Release-Signierung aktiv."
+            echo "$KEYSTORE_BASE64" | base64 --decode > android-app/android/notenleser.jks
+            cat > android-app/android/key.properties << EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=../notenleser.jks
+          EOF
+          else
+            echo "Kein Keystore-Secret – wird mit Debug-Key gebaut (kein Update ohne Deinstallation)."
+          fi
 
       - name: APK bauen
         working-directory: android-app
