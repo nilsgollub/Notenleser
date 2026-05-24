@@ -18,13 +18,8 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
-
-      - name: Plattform-Gerüst erzeugen (flutter create)
-        working-directory: android-app
-        run: flutter create . --project-name notenleser
 
       - name: Abhängigkeiten installieren
         working-directory: android-app
