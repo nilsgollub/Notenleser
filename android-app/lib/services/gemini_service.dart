@@ -4,14 +4,12 @@ import 'package:http/http.dart' as http;
 import '../models/song.dart';
 import 'omr_service.dart';
 
-class ClaudeException extends OmrException {
-  ClaudeException(super.message);
-}
-
-class ClaudeService implements OmrService {
-  static const _endpoint = 'https://api.anthropic.com/v1/messages';
-  static const _model = 'claude-opus-4-7';
-  static const _anthropicVersion = '2023-06-01';
+/// Optical Music Recognition über die Gemini 2.0 Flash API.
+/// Kostenloser Tier: 15 req/min, 1 500 req/Tag.
+class GeminiService implements OmrService {
+  static const _model = 'gemini-2.0-flash';
+  static const _baseUrl =
+      'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent';
 
   static const _prompt = '''
 Du bist ein Experte für Notenlesen (Optical Music Recognition).
@@ -49,73 +47,57 @@ Regeln:
 - Wenn das Bild kein lesbares Notenblatt zeigt, gib "notes": [] zurück.
 ''';
 
-  /// Liest die Noten aus einem Bild und liefert ein [Song]-Objekt.
-  Future<Song> recognize({
-    required String apiKey,
-    required File imageFile,
-  }) async {
+  @override
+  Future<Song> recognize({required String apiKey, required File imageFile}) async {
     final bytes = await imageFile.readAsBytes();
     final base64Image = base64Encode(bytes);
-    final mediaType =
+    final mimeType =
         imageFile.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
 
     final body = jsonEncode({
-      'model': _model,
-      'max_tokens': 16000,
-      // Adaptive Thinking hilft beim sorgfältigen Ablesen der Noten.
-      'thinking': {'type': 'adaptive'},
-      'output_config': {'effort': 'high'},
-      'messages': [
+      'contents': [
         {
-          'role': 'user',
-          'content': [
-            {
-              'type': 'image',
-              'source': {
-                'type': 'base64',
-                'media_type': mediaType,
-                'data': base64Image,
-              },
-            },
-            {'type': 'text', 'text': _prompt},
+          'parts': [
+            {'inline_data': {'mime_type': mimeType, 'data': base64Image}},
+            {'text': _prompt},
           ],
         },
       ],
+      'generationConfig': {
+        'temperature': 0,
+        'responseMimeType': 'application/json',
+      },
     });
 
     http.Response res;
     try {
+      final uri = Uri.parse('$_baseUrl?key=$apiKey');
       res = await http
-          .post(
-            Uri.parse(_endpoint),
-            headers: {
-              'x-api-key': apiKey,
-              'anthropic-version': _anthropicVersion,
-              'content-type': 'application/json',
-            },
-            body: body,
-          )
-          .timeout(const Duration(seconds: 180));
+          .post(uri, headers: {'content-type': 'application/json'}, body: body)
+          .timeout(const Duration(seconds: 120));
     } on SocketException {
-      throw ClaudeException(
+      throw OmrException(
           'Keine Internetverbindung. Die Notenerkennung braucht Online-Zugang.');
     } catch (_) {
-      throw ClaudeException(
+      throw OmrException(
           'Zeitüberschreitung oder Netzwerkfehler. Bitte erneut versuchen.');
     }
 
-    if (res.statusCode == 401) {
-      throw ClaudeException('API-Key ungültig. Bitte in den Einstellungen prüfen.');
+    if (res.statusCode == 400 || res.statusCode == 403) {
+      throw OmrException('Gemini API-Key ungültig. Bitte in den Einstellungen prüfen.');
     }
     if (res.statusCode == 429) {
-      throw ClaudeException('Zu viele Anfragen (Rate Limit). Kurz warten und erneut versuchen.');
+      throw OmrException(
+          'Gemini-Tageslimit erreicht (1 500 kostenlose Anfragen/Tag). '
+          'Morgen wieder verfügbar oder auf Claude wechseln.');
     }
     if (res.statusCode >= 500) {
-      throw ClaudeException('Server-Fehler bei Anthropic (${res.statusCode}). Später erneut versuchen.');
+      throw OmrException(
+          'Server-Fehler bei Google (${res.statusCode}). Später erneut versuchen.');
     }
     if (res.statusCode != 200) {
       final detail = _extractErrorMessage(res.body);
-      throw ClaudeException('Anfrage fehlgeschlagen (${res.statusCode}): $detail');
+      throw OmrException('Anfrage fehlgeschlagen (${res.statusCode}): $detail');
     }
 
     final jsonText = _extractText(res.body);
@@ -123,40 +105,33 @@ Regeln:
     final song = Song.fromClaudeJson(data);
 
     if (song.notes.isEmpty) {
-      throw ClaudeException(
+      throw OmrException(
           'Es konnten keine Noten erkannt werden. Bitte ein schärferes, '
           'gerade ausgerichtetes Foto mit gutem Kontrast versuchen.');
     }
     return song;
   }
 
-  /// Extrahiert den zusammengesetzten Text aller text-Blöcke der Antwort.
   String _extractText(String responseBody) {
     final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-    final content = decoded['content'] as List? ?? const [];
-    final buffer = StringBuffer();
-    for (final block in content) {
-      if (block is Map && block['type'] == 'text') {
-        buffer.write(block['text'] ?? '');
-      }
-    }
-    return buffer.toString();
+    final candidates = decoded['candidates'] as List? ?? const [];
+    if (candidates.isEmpty) throw OmrException('Gemini hat keine Antwort geliefert.');
+    final parts =
+        (candidates.first as Map)['content']?['parts'] as List? ?? const [];
+    return parts.whereType<Map>().map((p) => p['text']?.toString() ?? '').join();
   }
 
-  /// Extrahiert das erste JSON-Objekt aus einem (evtl. mit ```json umrahmten) Text.
   Map<String, dynamic> _parseJsonObject(String text) {
-    var t = text.trim();
-    // Code-Fences entfernen
-    t = t.replaceAll(RegExp(r'^```(?:json)?', multiLine: false), '').trim();
+    final t = text.trim();
     final start = t.indexOf('{');
     final end = t.lastIndexOf('}');
     if (start < 0 || end <= start) {
-      throw ClaudeException('Antwort konnte nicht als Noten gelesen werden.');
+      throw OmrException('Antwort konnte nicht als Noten gelesen werden.');
     }
     try {
       return jsonDecode(t.substring(start, end + 1)) as Map<String, dynamic>;
     } catch (_) {
-      throw ClaudeException('Antwort der Notenerkennung war ungültig.');
+      throw OmrException('Antwort der Notenerkennung war ungültig.');
     }
   }
 
