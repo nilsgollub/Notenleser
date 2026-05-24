@@ -4,6 +4,10 @@ import 'package:http/http.dart' as http;
 import '../models/song.dart';
 import 'omr_service.dart';
 
+class ClaudeException extends OmrException {
+  ClaudeException(super.message);
+}
+
 class ClaudeService implements OmrService {
   static const _endpoint = 'https://api.anthropic.com/v1/messages';
   static const _model = 'claude-opus-4-7';
@@ -29,8 +33,11 @@ danach, in genau dieser Struktur:
 }
 
 Regeln:
-- pitch in wissenschaftlicher Notation: C4 = mittleres C. Vorzeichen als # oder b
-  (z. B. F#5, Bb3). Pausen als "REST".
+- pitch: wissenschaftliche Notation, C4 = mittleres C. Vorzeichen als # oder b
+  (z. B. F#5, Bb3). WICHTIG: Pausen/Stille als "REST" angeben.
+- WICHTIG PAUSEN: Füge für JEDE rhythmische Pause (Viertel-, Halb-, ganze Pause
+  usw.) eine eigene Note mit pitch="REST" und der korrekten duration_beats ein.
+  Pausen zwischen Tönen dürfen nicht weggelassen werden.
 - duration_beats: Dauer in Schlägen. Ganze Note = 4.0, Halbe = 2.0,
   Viertel = 1.0, Achtel = 0.5, Sechzehntel = 0.25. Punktierungen entsprechend
   (punktierte Viertel = 1.5).
@@ -45,8 +52,11 @@ Regeln:
 - Wenn das Bild kein lesbares Notenblatt zeigt, gib "notes": [] zurück.
 ''';
 
-  @override
-  Future<Song> recognize({required String apiKey, required File imageFile}) async {
+  /// Liest die Noten aus einem Bild und liefert ein [Song]-Objekt.
+  Future<Song> recognize({
+    required String apiKey,
+    required File imageFile,
+  }) async {
     final bytes = await imageFile.readAsBytes();
     final base64Image = base64Encode(bytes);
     final mediaType =
@@ -55,6 +65,7 @@ Regeln:
     final body = jsonEncode({
       'model': _model,
       'max_tokens': 16000,
+      // Adaptive Thinking hilft beim sorgfältigen Ablesen der Noten.
       'thinking': {'type': 'adaptive'},
       'output_config': {'effort': 'high'},
       'messages': [
@@ -89,25 +100,25 @@ Regeln:
           )
           .timeout(const Duration(seconds: 180));
     } on SocketException {
-      throw OmrException(
+      throw ClaudeException(
           'Keine Internetverbindung. Die Notenerkennung braucht Online-Zugang.');
     } catch (_) {
-      throw OmrException(
+      throw ClaudeException(
           'Zeitüberschreitung oder Netzwerkfehler. Bitte erneut versuchen.');
     }
 
     if (res.statusCode == 401) {
-      throw OmrException('Claude API-Key ungültig. Bitte in den Einstellungen prüfen.');
+      throw ClaudeException('API-Key ungültig. Bitte in den Einstellungen prüfen.');
     }
     if (res.statusCode == 429) {
-      throw OmrException('Zu viele Anfragen (Rate Limit). Kurz warten und erneut versuchen.');
+      throw ClaudeException('Zu viele Anfragen (Rate Limit). Kurz warten und erneut versuchen.');
     }
     if (res.statusCode >= 500) {
-      throw OmrException('Server-Fehler bei Anthropic (${res.statusCode}). Später erneut versuchen.');
+      throw ClaudeException('Server-Fehler bei Anthropic (${res.statusCode}). Später erneut versuchen.');
     }
     if (res.statusCode != 200) {
       final detail = _extractErrorMessage(res.body);
-      throw OmrException('Anfrage fehlgeschlagen (${res.statusCode}): $detail');
+      throw ClaudeException('Anfrage fehlgeschlagen (${res.statusCode}): $detail');
     }
 
     final jsonText = _extractText(res.body);
@@ -115,13 +126,14 @@ Regeln:
     final song = Song.fromClaudeJson(data);
 
     if (song.notes.isEmpty) {
-      throw OmrException(
+      throw ClaudeException(
           'Es konnten keine Noten erkannt werden. Bitte ein schärferes, '
           'gerade ausgerichtetes Foto mit gutem Kontrast versuchen.');
     }
     return song;
   }
 
+  /// Extrahiert den zusammengesetzten Text aller text-Blöcke der Antwort.
   String _extractText(String responseBody) {
     final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
     final content = decoded['content'] as List? ?? const [];
@@ -134,18 +146,20 @@ Regeln:
     return buffer.toString();
   }
 
+  /// Extrahiert das erste JSON-Objekt aus einem (evtl. mit ```json umrahmten) Text.
   Map<String, dynamic> _parseJsonObject(String text) {
     var t = text.trim();
+    // Code-Fences entfernen
     t = t.replaceAll(RegExp(r'^```(?:json)?', multiLine: false), '').trim();
     final start = t.indexOf('{');
     final end = t.lastIndexOf('}');
     if (start < 0 || end <= start) {
-      throw OmrException('Antwort konnte nicht als Noten gelesen werden.');
+      throw ClaudeException('Antwort konnte nicht als Noten gelesen werden.');
     }
     try {
       return jsonDecode(t.substring(start, end + 1)) as Map<String, dynamic>;
     } catch (_) {
-      throw OmrException('Antwort der Notenerkennung war ungültig.');
+      throw ClaudeException('Antwort der Notenerkennung war ungültig.');
     }
   }
 

@@ -30,7 +30,7 @@ class _ScanScreenState extends State<ScanScreen> {
   String _error = '';
   Song? _result;
   bool _hasKey = false;
-  OmrProvider _provider = OmrProvider.gemini;
+  OmrProvider _provider = OmrProvider.claude;
 
   @override
   void initState() {
@@ -41,10 +41,12 @@ class _ScanScreenState extends State<ScanScreen> {
   Future<void> _refreshSettings() async {
     final has = await _settings.hasActiveApiKey();
     final provider = await _settings.getProvider();
-    if (mounted) setState(() {
-      _hasKey = has;
-      _provider = provider;
-    });
+    if (mounted) {
+      setState(() {
+        _hasKey = has;
+        _provider = provider;
+      });
+    }
   }
 
   Future<void> _pick(ImageSource source) async {
@@ -81,8 +83,9 @@ class _ScanScreenState extends State<ScanScreen> {
       _error = '';
     });
 
-    final OmrService service =
-        _provider == OmrProvider.gemini ? GeminiService() : ClaudeService();
+    final OmrService service = _provider == OmrProvider.gemini
+        ? GeminiService(model: await _settings.getGeminiModel())
+        : ClaudeService();
 
     try {
       final song = await service.recognize(apiKey: apiKey, imageFile: _image!);
@@ -228,8 +231,11 @@ class _ScanScreenState extends State<ScanScreen> {
         ),
         const SizedBox(width: 4),
         Text(
-          isGemini ? 'Gemini 2.0 Flash (kostenlos)' : 'Claude Opus (kostenpflichtig)',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          isGemini
+              ? 'Gemini 2.0 Flash (kostenlos)'
+              : 'Claude Opus (kostenpflichtig)',
+          style:
+              const TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -239,7 +245,7 @@ class _ScanScreenState extends State<ScanScreen> {
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.accent.withOpacity(0.12),
+          color: AppColors.accent.withAlpha(30),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -247,8 +253,10 @@ class _ScanScreenState extends State<ScanScreen> {
             const Icon(Icons.key_outlined, color: AppColors.accent, size: 20),
             const SizedBox(width: 10),
             const Expanded(
-              child: Text('Kein API-Key hinterlegt. Für die Erkennung benötigt.',
-                  style: TextStyle(fontSize: 13)),
+              child: Text(
+                'Kein API-Key hinterlegt. Für die Erkennung benötigt.',
+                style: TextStyle(fontSize: 13),
+              ),
             ),
             TextButton(onPressed: _openSettings, child: const Text('Einrichten')),
           ],
@@ -262,7 +270,9 @@ class _ScanScreenState extends State<ScanScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(
-              width: 44, height: 44, child: CircularProgressIndicator(strokeWidth: 3)),
+              width: 44,
+              height: 44,
+              child: CircularProgressIndicator(strokeWidth: 3)),
           const SizedBox(height: 20),
           const Text('Noten werden gelesen…',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -272,7 +282,8 @@ class _ScanScreenState extends State<ScanScreen> {
                 ? 'Gemini analysiert das Notenblatt (kann ~15 Sek. dauern).'
                 : 'Claude analysiert das Notenblatt (kann ~30 Sek. dauern).',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style:
+                const TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
       ),
@@ -289,10 +300,13 @@ class _ScanScreenState extends State<ScanScreen> {
           const SizedBox(height: 16),
           Text(song.title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('${song.notes.length} Noten · ${song.keySignature} · ♩=${song.tempoBpm}',
-              style: const TextStyle(color: AppColors.textSecondary)),
+          Text(
+              '${song.notes.length} Noten · ${song.keySignature} · ♩=${song.tempoBpm}',
+              style:
+                  const TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).push(
@@ -302,7 +316,9 @@ class _ScanScreenState extends State<ScanScreen> {
             label: const Text('Jetzt anhören'),
           ),
           const SizedBox(height: 10),
-          TextButton(onPressed: _reset, child: const Text('Weiteres Lied scannen')),
+          TextButton(
+              onPressed: _reset,
+              child: const Text('Weiteres Lied scannen')),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Zur Bibliothek'),
@@ -323,7 +339,8 @@ class _ScanScreenState extends State<ScanScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14)),
           const SizedBox(height: 24),
-          FilledButton(onPressed: _reset, child: const Text('Nochmal versuchen')),
+          FilledButton(
+              onPressed: _reset, child: const Text('Nochmal versuchen')),
         ],
       ),
     );

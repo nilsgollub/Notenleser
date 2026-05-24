@@ -13,6 +13,7 @@ class AppColors {
   static const error = Color(0xFFF44C6F);
   static const text = Color(0xFFF0F0F5);
   static const textSecondary = Color(0xFF8888AA);
+  static const textMuted = Color(0xFF8888AA);
   static const border = Color(0x14FFFFFF);
 }
 
