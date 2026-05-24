@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/backend_service.dart';
 import '../services/gemini_service.dart';
 import '../services/omr_service.dart';
 import '../services/settings_service.dart';
@@ -13,13 +14,15 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _settings = SettingsService();
-  final _claudeController = TextEditingController();
-  final _geminiController = TextEditingController();
+  final _claudeController   = TextEditingController();
+  final _geminiController   = TextEditingController();
+  final _backendController  = TextEditingController();
 
   OmrProvider _provider = OmrProvider.claude;
   String _geminiModel = GeminiService.defaultModel;
   List<String> _availableModels = [];
   bool _loadingModels = false;
+  bool _testingBackend = false;
 
   bool _obscureClaude = true;
   bool _obscureGemini = true;
@@ -32,14 +35,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _load() async {
-    final provider = await _settings.getProvider();
-    final claudeKey = await _settings.getClaudeApiKey();
-    final geminiKey = await _settings.getGeminiApiKey();
+    final provider    = await _settings.getProvider();
+    final claudeKey   = await _settings.getClaudeApiKey();
+    final geminiKey   = await _settings.getGeminiApiKey();
     final geminiModel = await _settings.getGeminiModel();
+    final backendUrl  = await _settings.getBackendUrl();
     setState(() {
       _provider = provider;
-      _claudeController.text = claudeKey ?? '';
-      _geminiController.text = geminiKey ?? '';
+      _claudeController.text  = claudeKey  ?? '';
+      _geminiController.text  = geminiKey  ?? '';
+      _backendController.text = backendUrl ?? '';
       _geminiModel = geminiModel;
       _loading = false;
     });
@@ -49,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _claudeController.dispose();
     _geminiController.dispose();
+    _backendController.dispose();
     super.dispose();
   }
 
@@ -77,11 +83,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _testBackend() async {
+    final url = _backendController.text.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte zuerst die Server-URL eingeben.')),
+      );
+      return;
+    }
+    setState(() => _testingBackend = true);
+    final ok = await BackendService.testConnection(url);
+    if (!mounted) return;
+    setState(() => _testingBackend = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? 'Verbindung erfolgreich!' : 'Server nicht erreichbar.'),
+      backgroundColor: ok ? AppColors.success : AppColors.error,
+    ));
+  }
+
   Future<void> _save() async {
     await _settings.setProvider(_provider);
     await _settings.setClaudeApiKey(_claudeController.text);
     await _settings.setGeminiApiKey(_geminiController.text);
     await _settings.setGeminiModel(_geminiModel);
+    await _settings.setBackendUrl(_backendController.text);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Einstellungen gespeichert')),
@@ -98,11 +123,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                const Text('KI-Anbieter',
+                const Text('Erkennungs-Methode',
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                 const SizedBox(height: 8),
                 const Text(
-                  'Wähle, welche KI deine Notenblätter erkennen soll.',
+                  'Wähle, wie deine Notenblätter erkannt werden sollen.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
@@ -118,6 +143,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       label: Text('Claude'),
                       icon: Icon(Icons.psychology_outlined),
                     ),
+                    ButtonSegment(
+                      value: OmrProvider.backend,
+                      label: Text('Server'),
+                      icon: Icon(Icons.dns_outlined),
+                    ),
                   ],
                   selected: {_provider},
                   onSelectionChanged: (s) => setState(() => _provider = s.first),
@@ -127,8 +157,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 16),
-                if (_provider == OmrProvider.gemini) ..._geminiFields(),
-                if (_provider == OmrProvider.claude) ..._claudeFields(),
+                if (_provider == OmrProvider.gemini)  ..._geminiFields(),
+                if (_provider == OmrProvider.claude)  ..._claudeFields(),
+                if (_provider == OmrProvider.backend) ..._backendFields(),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _save,
@@ -141,18 +172,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _providerBadge() {
-    if (_provider == OmrProvider.gemini) {
-      return const _InfoChip(
-        icon: Icons.money_off_outlined,
-        text: 'Kostenlos · Kontingent je nach Modell · Google-Konto nötig',
-        color: AppColors.success,
-      );
+    switch (_provider) {
+      case OmrProvider.gemini:
+        return const _InfoChip(
+          icon: Icons.money_off_outlined,
+          text: 'Kostenlos · Kontingent je nach Modell · Google-Konto nötig',
+          color: AppColors.success,
+        );
+      case OmrProvider.claude:
+        return const _InfoChip(
+          icon: Icons.euro_outlined,
+          text: 'Ca. 2–5 Ct. pro Scan · Höchste Cloud-Erkennungsqualität',
+          color: AppColors.accent,
+        );
+      case OmrProvider.backend:
+        return const _InfoChip(
+          icon: Icons.wifi_off_outlined,
+          text: 'Lokal & offline · Zuverlässige Notenerkennung auf eigenem Server',
+          color: AppColors.primary,
+        );
     }
-    return const _InfoChip(
-      icon: Icons.euro_outlined,
-      text: 'Ca. 2–5 Ct. pro Scan · Höchste Erkennungsqualität',
-      color: AppColors.accent,
-    );
   }
 
   List<Widget> _geminiFields() => [
@@ -273,6 +312,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => setState(() => _obscureClaude = !_obscureClaude),
             ),
           ),
+        ),
+      ];
+
+  List<Widget> _backendFields() => [
+        const Text('Server-URL',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+        const SizedBox(height: 8),
+        const Text(
+          'URL des Notenleser-OMR-Addons auf dem Raspberry Pi.\n'
+          'Standardport: 8765.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _backendController,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'http://homeassistant.local:8765',
+            prefixIcon: Icon(Icons.dns_outlined),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _testingBackend
+            ? const Center(
+                child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.5)))
+            : OutlinedButton.icon(
+                onPressed: _testBackend,
+                icon: const Icon(Icons.wifi_tethering),
+                label: const Text('Verbindung testen'),
+              ),
+        const SizedBox(height: 16),
+        const _InfoChip(
+          icon: Icons.info_outline,
+          text: 'Das OMR-Addon muss auf dem Raspberry Pi installiert und aktiv sein. '
+              'Erster Start lädt Modelle (~500 MB, einmalig).',
+          color: AppColors.textSecondary,
         ),
       ];
 }

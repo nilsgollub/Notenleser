@@ -3,16 +3,19 @@ import 'gemini_service.dart';
 import 'omr_service.dart';
 
 class SettingsService {
-  static const _kProvider = 'omr_provider';
-  static const _kClaudeKey = 'anthropic_api_key';
-  static const _kGeminiKey = 'gemini_api_key';
+  static const _kProvider   = 'omr_provider';
+  static const _kClaudeKey  = 'anthropic_api_key';
+  static const _kGeminiKey  = 'gemini_api_key';
   static const _kGeminiModel = 'gemini_model';
+  static const _kBackendUrl = 'backend_url';
 
   Future<OmrProvider> getProvider() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kProvider) == 'gemini'
-        ? OmrProvider.gemini
-        : OmrProvider.claude;
+    switch (prefs.getString(_kProvider)) {
+      case 'gemini':  return OmrProvider.gemini;
+      case 'backend': return OmrProvider.backend;
+      default:        return OmrProvider.claude;
+    }
   }
 
   Future<void> setProvider(OmrProvider provider) async {
@@ -52,9 +55,24 @@ class SettingsService {
     await prefs.setString(_kGeminiModel, model);
   }
 
+  Future<String?> getBackendUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString(_kBackendUrl);
+    return (url == null || url.trim().isEmpty) ? null : url.trim();
+  }
+
+  Future<void> setBackendUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kBackendUrl, url.trim());
+  }
+
+  /// Returns the active credential: API key for cloud providers, URL for backend.
   Future<String?> getActiveApiKey() async {
-    final provider = await getProvider();
-    return provider == OmrProvider.gemini ? getGeminiApiKey() : getClaudeApiKey();
+    switch (await getProvider()) {
+      case OmrProvider.gemini:  return getGeminiApiKey();
+      case OmrProvider.claude:  return getClaudeApiKey();
+      case OmrProvider.backend: return getBackendUrl();
+    }
   }
 
   Future<bool> hasActiveApiKey() async => (await getActiveApiKey()) != null;

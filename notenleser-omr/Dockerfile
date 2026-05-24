@@ -1,0 +1,27 @@
+ARG BUILD_FROM=python:3.11-slim-bookworm
+FROM $BUILD_FROM
+
+# System libraries required by OpenCV (headless) and oemer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libglib2.0-0 \
+        libgomp1 \
+        libsm6 \
+        libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY app/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Pre-download oemer ONNX models during build so the first request is fast.
+# The models are stored in /root/.oemer/ inside the image layer.
+RUN python -c "from oemer.inference import model_manager; model_manager.load_all()" || \
+    python -c "import oemer; oemer.MODULE_PATH" || true
+
+COPY app/ .
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+
+EXPOSE 8765
+CMD ["/run.sh"]

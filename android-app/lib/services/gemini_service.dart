@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/song.dart';
+import 'abc_parser.dart';
 import 'omr_service.dart';
 
 class GeminiService implements OmrService {
@@ -16,35 +17,35 @@ Du bist ein Experte für Notenlesen (Optical Music Recognition).
 Analysiere das beigefügte Foto eines Notenblatts und extrahiere die Melodie
 (die Hauptstimme – bei mehreren Systemen die oberste Melodielinie).
 
-Gib AUSSCHLIESSLICH ein JSON-Objekt zurück, ohne erklärenden Text davor oder
-danach, in genau dieser Struktur:
+Gib AUSSCHLIESSLICH ABC-Notation zurück, ohne erklärenden Text davor oder danach.
 
-{
-  "title": "Titel des Stücks (oder leerer String wenn unbekannt)",
-  "composer": "Komponist (oder leerer String wenn unbekannt)",
-  "key": "Tonart auf Deutsch, z. B. C-Dur oder a-Moll",
-  "time_signature": "Taktart, z. B. 4/4 oder 3/4",
-  "tempo_bpm": 100,
-  "notes": [
-    { "pitch": "C4", "duration_beats": 1.0, "measure": 1, "lyric": "Hän-" }
-  ]
-}
+Beispiel-Ausgabe (Hänschen Klein, G-Dur, 3/4-Takt):
+T:Hänschen klein
+C:Volksweise
+M:3/4
+Q:1/4=120
+L:1/4
+K:G
+G A B | c2 d | e3 | d3 |
+w:Hänsch- en klein ging al- lein
+c B A | G2 A | B3 | G3 |
+w:in die wei- te Welt hin- ein
 
-Regeln:
-- pitch: wissenschaftliche Notation, C4 = mittleres C. Vorzeichen als # oder b
-  (z. B. F#5, Bb3). WICHTIG: Pausen/Stille als "REST" angeben.
-- duration_beats: Dauer in Schlägen. Ganze Note = 4.0, Halbe = 2.0,
-  Viertel = 1.0, Achtel = 0.5, Sechzehntel = 0.25. Punktierungen entsprechend
-  (punktierte Viertel = 1.5).
-- WICHTIG PAUSEN: Füge für JEDE rhythmische Pause (Viertel-, Halb-, ganze Pause
-  usw.) eine eigene Note mit pitch="REST" und der korrekten duration_beats ein.
-  Pausen zwischen Tönen dürfen nicht weggelassen werden.
-- measure: 1-basierte Taktnummer.
-- lyric: Die unter der Note gedruckte Silbe/Wort EXAKT wie im Notenblatt
-  (inkl. Trennstriche "Hän-"). Weglassen wenn keine Lyrik. Pausen haben nie Lyrik.
-- Reihenfolge: Noten in Spielreihenfolge auflisten.
-- tempo_bpm: Tempoangabe übernehmen, sonst passendes Tempo schätzen (Kinderlieder 90–120).
-- Kein lesbares Notenblatt erkennbar: "notes": [] zurückgeben.
+Format-Regeln:
+- L:1/4 immer verwenden (Einheit = Viertelnote = 1 Schlag)
+- Tonhöhe: Großbuchstabe C–B = C4–B4 (mittleres C = C), Kleinbuchstabe c–b = C5–B5;
+  Komma senkt Oktave (C, = C3, C,, = C2), Apostroph erhöht (c' = C6)
+- Dauer: C = 1, C2 = 2, C4 = 4, C/ = 0,5, C3/2 = 1,5 (Schläge bei L:1/4)
+- Pausen: z = Viertelpause, z2 = Halbe, z4 = ganze Pause, z/ = Achtelpause
+  JEDE rhythmische Pause muss als z notiert werden – keine Pause auslassen!
+- Vorzeichen: ^C = Cis, _B = Bb, =C = C-natural (hebt Vorzeichen auf)
+  Vorzeichen gelten bis zum nächsten Taktstrich
+- Taktstriche: | zwischen Takten
+- Liedtext (w:): Jede Silbe als eigenes Wort, Bindestrich am Ende wenn Wort weitergeht
+  (z. B. "Hänsch- en klein"), w:-Zeile direkt nach der zugehörigen Notenzeile
+  Pausen bekommen keine Lyrik (in der w:-Zeile mit * überspringen)
+- Keine Akkorde, keine Mehrstimmigkeit – nur die Melodiestimme
+- Kein lesbares Notenblatt: nur leere Header ausgeben, keine Noten
 ''';
 
   @override
@@ -65,7 +66,6 @@ Regeln:
       ],
       'generationConfig': {
         'temperature': 0,
-        'responseMimeType': 'application/json',
       },
     });
 
@@ -102,9 +102,13 @@ Regeln:
       throw OmrException('Anfrage fehlgeschlagen (${res.statusCode}): $detail');
     }
 
-    final jsonText = _extractText(res.body);
-    final data = _parseJsonObject(jsonText);
-    final song = Song.fromClaudeJson(data);
+    final abcText = _extractText(res.body);
+    Song song;
+    try {
+      song = AbcParser().parse(abcText);
+    } catch (_) {
+      throw OmrException('Antwort der Notenerkennung konnte nicht gelesen werden.');
+    }
 
     if (song.notes.isEmpty) {
       throw OmrException(
@@ -142,20 +146,6 @@ Regeln:
     final parts =
         (candidates.first as Map)['content']?['parts'] as List? ?? const [];
     return parts.whereType<Map>().map((p) => p['text']?.toString() ?? '').join();
-  }
-
-  Map<String, dynamic> _parseJsonObject(String text) {
-    final t = text.trim();
-    final start = t.indexOf('{');
-    final end = t.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw OmrException('Antwort konnte nicht als Noten gelesen werden.');
-    }
-    try {
-      return jsonDecode(t.substring(start, end + 1)) as Map<String, dynamic>;
-    } catch (_) {
-      throw OmrException('Antwort der Notenerkennung war ungültig.');
-    }
   }
 
   String _extractErrorMessage(String body) {
