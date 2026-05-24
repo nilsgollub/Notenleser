@@ -28,6 +28,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _ready = false;
   bool _isPlaying = false;
   bool _karaoke = true;
+  late bool _showLyrics;
   double _displaySeconds = 0;
 
   // Glatte Position zwischen Player-Events interpolieren
@@ -38,6 +39,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void initState() {
     super.initState();
     _audio = AudioService(notes: widget.song.notes, baseBpm: widget.song.tempoBpm);
+    _showLyrics = _hasLyrics(widget.song);
 
     _subs.add(_audio.onPositionChanged.listen((d) {
       _anchorSeconds = d.inMilliseconds / 1000.0;
@@ -137,6 +139,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(song.title, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            tooltip: _showLyrics ? 'Piano-Roll anzeigen' : 'Liedtext anzeigen',
+            icon: Icon(_showLyrics ? Icons.piano_outlined : Icons.lyrics_outlined),
+            onPressed: () => setState(() => _showLyrics = !_showLyrics),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -145,7 +154,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             child: _ready
                 ? Container(
                     color: AppColors.bg,
-                    child: _hasLyrics(song)
+                    child: _showLyrics && _hasLyrics(song)
                         ? LyricsView(
                             notes: song.notes,
                             currentIndex: _karaoke

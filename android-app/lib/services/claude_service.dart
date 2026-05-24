@@ -33,8 +33,11 @@ danach, in genau dieser Struktur:
 }
 
 Regeln:
-- pitch in wissenschaftlicher Notation: C4 = mittleres C. Vorzeichen als # oder b
-  (z. B. F#5, Bb3). Pausen als "REST".
+- pitch: wissenschaftliche Notation, C4 = mittleres C. Vorzeichen als # oder b
+  (z. B. F#5, Bb3). WICHTIG: Pausen/Stille als "REST" angeben.
+- WICHTIG PAUSEN: Füge für JEDE rhythmische Pause (Viertel-, Halb-, ganze Pause
+  usw.) eine eigene Note mit pitch="REST" und der korrekten duration_beats ein.
+  Pausen zwischen Tönen dürfen nicht weggelassen werden.
 - duration_beats: Dauer in Schlägen. Ganze Note = 4.0, Halbe = 2.0,
   Viertel = 1.0, Achtel = 0.5, Sechzehntel = 0.25. Punktierungen entsprechend
   (punktierte Viertel = 1.5).

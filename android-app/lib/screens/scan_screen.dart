@@ -83,8 +83,9 @@ class _ScanScreenState extends State<ScanScreen> {
       _error = '';
     });
 
-    final OmrService service =
-        _provider == OmrProvider.gemini ? GeminiService() : ClaudeService();
+    final OmrService service = _provider == OmrProvider.gemini
+        ? GeminiService(model: await _settings.getGeminiModel())
+        : ClaudeService();
 
     try {
       final song = await service.recognize(apiKey: apiKey, imageFile: _image!);

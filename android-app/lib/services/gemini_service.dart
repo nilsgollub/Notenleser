@@ -4,12 +4,12 @@ import 'package:http/http.dart' as http;
 import '../models/song.dart';
 import 'omr_service.dart';
 
-/// Optical Music Recognition über die Gemini 2.0 Flash API.
-/// Kostenloser Tier: 15 req/min, 1 500 req/Tag.
 class GeminiService implements OmrService {
-  static const _model = 'gemini-2.0-flash';
-  static const _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent';
+  static const defaultModel = 'gemini-2.5-flash';
+  static const _apiBase = 'https://generativelanguage.googleapis.com/v1beta';
+
+  const GeminiService({this.model = defaultModel});
+  final String model;
 
   static const _prompt = '''
 Du bist ein Experte für Notenlesen (Optical Music Recognition).
@@ -31,20 +31,20 @@ danach, in genau dieser Struktur:
 }
 
 Regeln:
-- pitch in wissenschaftlicher Notation: C4 = mittleres C. Vorzeichen als # oder b
-  (z. B. F#5, Bb3). Pausen als "REST".
+- pitch: wissenschaftliche Notation, C4 = mittleres C. Vorzeichen als # oder b
+  (z. B. F#5, Bb3). WICHTIG: Pausen/Stille als "REST" angeben.
 - duration_beats: Dauer in Schlägen. Ganze Note = 4.0, Halbe = 2.0,
   Viertel = 1.0, Achtel = 0.5, Sechzehntel = 0.25. Punktierungen entsprechend
   (punktierte Viertel = 1.5).
+- WICHTIG PAUSEN: Füge für JEDE rhythmische Pause (Viertel-, Halb-, ganze Pause
+  usw.) eine eigene Note mit pitch="REST" und der korrekten duration_beats ein.
+  Pausen zwischen Tönen dürfen nicht weggelassen werden.
 - measure: 1-basierte Taktnummer.
-- lyric: Die unter der Note gedruckte Silbe oder das Wort, EXAKT wie im Notenblatt
-  (inklusive Trennstriche, z. B. "Hän-", "sel", "und"). Lasse das Feld weg (oder
-  leerer String) wenn keine Lyrik für diese Note vorhanden ist. Pausen haben nie
-  eine Lyrik. Hat das Stück generell keinen Text, lasse lyric bei allen Noten weg.
-- Liste die Noten in der Reihenfolge auf, in der sie gespielt werden.
-- tempo_bpm: falls keine Tempoangabe gedruckt ist, schätze ein passendes Tempo
-  für die Stilrichtung (Kinderlieder meist 90–120).
-- Wenn das Bild kein lesbares Notenblatt zeigt, gib "notes": [] zurück.
+- lyric: Die unter der Note gedruckte Silbe/Wort EXAKT wie im Notenblatt
+  (inkl. Trennstriche "Hän-"). Weglassen wenn keine Lyrik. Pausen haben nie Lyrik.
+- Reihenfolge: Noten in Spielreihenfolge auflisten.
+- tempo_bpm: Tempoangabe übernehmen, sonst passendes Tempo schätzen (Kinderlieder 90–120).
+- Kein lesbares Notenblatt erkennbar: "notes": [] zurückgeben.
 ''';
 
   @override
@@ -71,7 +71,7 @@ Regeln:
 
     http.Response res;
     try {
-      final uri = Uri.parse('$_baseUrl?key=$apiKey');
+      final uri = Uri.parse('$_apiBase/models/$model:generateContent?key=$apiKey');
       res = await http
           .post(uri, headers: {'content-type': 'application/json'}, body: body)
           .timeout(const Duration(seconds: 120));
@@ -83,13 +83,15 @@ Regeln:
           'Zeitüberschreitung oder Netzwerkfehler. Bitte erneut versuchen.');
     }
 
-    if (res.statusCode == 400 || res.statusCode == 403) {
+    if (res.statusCode == 403) {
       throw OmrException('Gemini API-Key ungültig. Bitte in den Einstellungen prüfen.');
+    }
+    if (res.statusCode == 404) {
+      throw OmrException('Modell "$model" nicht gefunden. Bitte in den Einstellungen ein anderes Modell wählen.');
     }
     if (res.statusCode == 429) {
       throw OmrException(
-          'Gemini-Tageslimit erreicht (1 500 kostenlose Anfragen/Tag). '
-          'Morgen wieder verfügbar oder auf Claude wechseln.');
+          'Rate-Limit erreicht. Kurz warten und erneut versuchen, oder auf Claude wechseln.');
     }
     if (res.statusCode >= 500) {
       throw OmrException(
@@ -110,6 +112,27 @@ Regeln:
           'gerade ausgerichtetes Foto mit gutem Kontrast versuchen.');
     }
     return song;
+  }
+
+  /// Lädt die verfügbaren Gemini-Modelle die generateContent unterstützen.
+  static Future<List<String>> fetchModels(String apiKey) async {
+    try {
+      final uri = Uri.parse('$_apiBase/models?key=$apiKey&pageSize=100');
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return [];
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final models = (data['models'] as List? ?? []).cast<Map<String, dynamic>>();
+      return models
+          .where((m) =>
+              ((m['supportedGenerationMethods'] as List?) ?? [])
+                  .contains('generateContent'))
+          .map((m) => (m['name'] as String).replaceFirst('models/', ''))
+          .where((name) => name.contains('gemini'))
+          .toList()
+        ..sort();
+    } catch (_) {
+      return [];
+    }
   }
 
   String _extractText(String responseBody) {
