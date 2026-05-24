@@ -21,5 +21,8 @@ android-app/android/app/release/
 .env
 .env.local
 
+# Lokale Claude-Settings (enthält Secrets – nie committen!)
+.claude/settings.local.json
+
 # macOS
 .DS_Store
