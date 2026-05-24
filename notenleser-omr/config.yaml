@@ -14,4 +14,3 @@ options:
   log_level: "info"
 schema:
   log_level: "list(debug|info|warning|error)"
-image: "ghcr.io/nilsgollub/notenleser-omr-{arch}"
