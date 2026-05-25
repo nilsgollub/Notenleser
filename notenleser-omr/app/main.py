@@ -20,10 +20,8 @@ async def health():
 
 @app.post("/recognize")
 async def recognize(image: UploadFile = File(...)):
-    if image.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(status_code=415, detail="Nur JPEG, PNG oder WebP erlaubt.")
-
-    suffix = ".png" if image.content_type == "image/png" else ".jpg"
+    ct = image.content_type or ""
+    suffix = ".png" if "png" in ct else ".jpg"
     data = await image.read()
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:

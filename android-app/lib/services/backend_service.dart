@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../models/song.dart';
 import 'omr_service.dart';
 
@@ -13,7 +14,11 @@ class BackendService implements OmrService {
   @override
   Future<Song> recognize({required String apiKey, required File imageFile}) async {
     final request = http.MultipartRequest('POST', Uri.parse('$_base/recognize'));
-    request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+    request.files.add(await http.MultipartFile.fromPath(
+      'image',
+      imageFile.path,
+      contentType: MediaType('image', 'jpeg'),
+    ));
 
     http.StreamedResponse streamed;
     try {
