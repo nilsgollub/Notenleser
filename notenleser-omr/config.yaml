@@ -1,5 +1,5 @@
 name: "Notenleser OMR"
-version: "1.0.0"
+version: "1.0.5"
 slug: "notenleser_omr"
 description: "Lokale Notenerkennung (OMR) mit oemer für die Notenleser-App"
 url: "https://github.com/nilsgollub/Notenleser"
