@@ -39,7 +39,7 @@ def recognize_sheet_music(image_path: str) -> dict[str, Any]:
 
 
 def _run_oemer(image_path: str, out_dir: str) -> None:
-    cmd = ["oemer", image_path, "-o", out_dir, "--use-tf", "false"]
+    cmd = ["oemer", image_path, "-o", out_dir]
     logger.info("oemer: %s", " ".join(cmd))
     try:
         result = subprocess.run(
