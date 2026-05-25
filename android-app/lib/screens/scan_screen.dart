@@ -92,7 +92,7 @@ class _ScanScreenState extends State<ScanScreen> {
         service = ClaudeService();
       case OmrProvider.backend:
         // apiKey holds the backend URL for this provider (see SettingsService)
-        service = BackendService(url: apiKey);
+        service = BackendService(baseUrl: apiKey);
     }
 
     try {

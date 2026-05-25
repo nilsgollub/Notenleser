@@ -110,7 +110,7 @@ class AbcParser {
         .replaceAll(RegExp(r'!"[^"]*"'), ''); // inline annotations
 
     final re = RegExp(
-      r'([_^=]{0,2})([A-Ga-g])([,\']*)(\d*)(/+\d*)?' // note
+      r"([_^=]{0,2})([A-Ga-g])([,']*)(\d*)(/+\d*)?" // note
       r'|(z|Z)(\d*)(/+\d*)?' // rest
       r'|([:|]*\|{1,2}[\]:]?|:\|[\]:]?)' // bar line
     );
