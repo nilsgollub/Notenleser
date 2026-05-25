@@ -8,6 +8,7 @@ import '../services/claude_service.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
 import '../services/omr_service.dart';
+import '../services/scan_foreground.dart';
 import '../services/settings_service.dart';
 import '../theme.dart';
 import 'player_screen.dart';
@@ -95,6 +96,13 @@ class _ScanScreenState extends State<ScanScreen> {
         service = BackendService(baseUrl: apiKey);
     }
 
+    final hint = switch (_provider) {
+      OmrProvider.gemini  => 'Gemini analysiert das Notenblatt…',
+      OmrProvider.claude  => 'Claude analysiert das Notenblatt…',
+      OmrProvider.backend => 'Lokale Erkennung läuft (2–5 Min.)…',
+    };
+    await ScanForeground.start(hint);
+
     try {
       final song = await service.recognize(apiKey: apiKey, imageFile: _image!);
       final saved = await DatabaseService.instance.insert(song);
@@ -115,6 +123,8 @@ class _ScanScreenState extends State<ScanScreen> {
         _stage = _Stage.error;
         _error = 'Unerwarteter Fehler: $e';
       });
+    } finally {
+      await ScanForeground.stop();
     }
   }
 

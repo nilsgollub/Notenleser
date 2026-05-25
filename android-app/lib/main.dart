@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'theme.dart';
 import 'screens/library_screen.dart';
 
-void main() => runApp(const NotenleserApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort();
+  runApp(const NotenleserApp());
+}
 
 class NotenleserApp extends StatelessWidget {
   const NotenleserApp({super.key});

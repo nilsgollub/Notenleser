@@ -28,6 +28,9 @@ dependencies:
   # Einstellungen (API-Key)
   shared_preferences: ^2.3.2
 
+  # Foreground Service – verhindert dass Android lange Scans abbricht
+  flutter_foreground_task: ^8.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
