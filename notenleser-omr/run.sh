@@ -1,8 +1,9 @@
-#!/usr/bin/with-contenv bashio
+#!/bin/bash
+set -e
 
-LOG_LEVEL="$(bashio::config 'log_level' 'info' 2>/dev/null || echo 'info')"
+LOG_LEVEL="${LOG_LEVEL:-info}"
 
-bashio::log.info "Starte Notenleser OMR auf Port 8765 (log-level: ${LOG_LEVEL})"
+echo "Starte Notenleser OMR auf Port 8765 (log-level: ${LOG_LEVEL})"
 
 exec uvicorn main:app \
     --host 0.0.0.0 \
